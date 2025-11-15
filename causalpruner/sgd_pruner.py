@@ -207,7 +207,7 @@ class SGDPrunerConfig(PrunerConfig):
     trainer_config: CausalWeightsTrainerConfig
     num_batches_in_epoch: int = -1
     loss_fn: Callable = partial(F.cross_entropy, label_smoothing=0.1)
-###CHANGE##################################################################################
+    ###CHANGE##################################################################################
     return_masks: bool = False
 
 
@@ -302,17 +302,16 @@ class SGDPruner(Pruner):
             )
         prune_pbar.close()
         # Shutdown prune_dataloader's worker until next iteration to save resources.
-        del self.prune_dataloader._iterator
-        self.prune_dataloader._iterator = None
+        # del self.prune_dataloader._iterator
+        # self.prune_dataloader._iterator = None
         print("Computing masks")
         self.compute_masks()
         self.reset_weights()
         self.reset_params()
-###CHANGE##################################################################################
-        if self.config.return_masks:
-            # Helper to read the newly applied masks from the model
-            masks = self._get_current_masks_from_model()
-            return masks
+        ###CHANGE##################################################################################
+        # if self.config.return_masks:
+        #     mask = self.get_masks()
+        #     return mask
 
     @torch.no_grad()
     def start_iteration(self):
@@ -399,8 +398,8 @@ class SGDPruner(Pruner):
             masks = self.get_masks()
             for module_name, module in self.modules_dict.items():
                 prune.custom_from_mask(module, "weight", masks[module_name])
-        del self.trainer
-        self.trainer = None
+        # del self.trainer
+        # self.trainer = None
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -504,14 +503,15 @@ class SGDPruner(Pruner):
             },
             dir_path,
         )
-#######################CHANGE###
-#Cannot just use get_masks function as it requires trainer object to be alive
-    @torch.no_grad()
-    def _get_current_masks_from_model(self) -> dict[str, torch.Tensor]:
-        masks = {}
-        for name, module in self.modules_dict.items():
-            if hasattr(module, 'weight_mask'):
-                masks[name] = module.weight_mask.detach().clone()
-            else:
-                masks[name] = torch.ones_like(module.weight)
-        return masks
+
+    #######################CHANGE###
+    # Cannot just use get_masks function as it requires trainer object to be alive
+    # @torch.no_grad()
+    # def _get_current_masks_from_model(self) -> dict[str, torch.Tensor]:
+    #     masks = {}
+    #     for name, module in self.modules_dict.items():
+    #         if hasattr(module, "weight_mask"):
+    #             masks[name] = module.weight_mask.detach().clone()
+    #         else:
+    #             masks[name] = torch.ones_like(module.weight)
+    #     return masks

@@ -22,6 +22,7 @@ class LeNet(nn.Module):
         self.size_flatten = 50 * H * W
         self.fc1 = nn.Linear(self.size_flatten, 500)
         self.fc2 = nn.Linear(500, num_classes)
+        self.fc2.is_classifier = True
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

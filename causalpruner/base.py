@@ -30,14 +30,16 @@ class Pruner(ABC):
     ]
 
     _MODULES_TO_RESET = [
-        nn.BatchNorm1d,
-        nn.BatchNorm2d,
+        # nn.BatchNorm1d,
+        # nn.BatchNorm2d,
     ]
 
     _PREFIXES_TO_CONSUME = ["_forward_module."]
 
     @staticmethod
     def is_module_supported(module: nn.Module) -> bool:
+        if getattr(module, "is_classifier", False):
+            return False
         for supported_module in Pruner._SUPPORTED_MODULES:
             if isinstance(module, supported_module):
                 return True

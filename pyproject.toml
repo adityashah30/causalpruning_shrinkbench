@@ -1,20 +1,22 @@
 [project]
-name = "causalpruning"
+name = "causalpruning_new"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "ipython>=8.32.0",
-    "jupyter>=1.1.1",
-    "lightning>=2.5.0.post0",
-    "psutil>=7.0.0",
-    "scikit-learn>=1.6.1",
-    "tensorboard>=2.19.0",
-    "tensorboard-plugin-profile>=2.19.7",
-    "torch>=2.7.0",
-    "torchvision>=0.21.0",
-    "tqdm>=4.67.1",
+  "ipython>=8.32.0",
+  "jupyter>=1.1.1",
+  "lightning>=2.5.0.post0",
+  "matplotlib>=3.10.7",
+  "pandas>=2.3.3",
+  "psutil>=7.0.0",
+  "scikit-learn>=1.6.1",
+  "tensorboard>=2.19.0",
+  "tensorboard-plugin-profile>=2.19.7",
+  "torch>=2.7.0",
+  "torchvision>=0.21.0",
+  "tqdm>=4.67.1",
 ]
 
 [[tool.uv.index]]
@@ -23,10 +25,5 @@ url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = [
-    { index = "pytorch-cu128" },
-]
-torchvision = [
-    { index = "pytorch-cu128" },
-]
-
+torch = [{ index = "pytorch-cu128" }]
+torchvision = [{ index = "pytorch-cu128" }]

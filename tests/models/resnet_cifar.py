@@ -70,8 +70,7 @@ class ResNetCifar(nn.Module):
         )
         self.bn1 = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(
-            self.layer_gates[0], block, 16, layers[0])
+        self.layer1 = self._make_layer(self.layer_gates[0], block, 16, layers[0])
         self.layer2 = self._make_layer(
             self.layer_gates[1], block, 32, layers[1], stride=2
         )
@@ -80,6 +79,7 @@ class ResNetCifar(nn.Module):
         )
         self.avgpool = nn.AvgPool2d(8, stride=1)
         self.fc = nn.Linear(64 * block.expansion, num_classes)
+        self.fc.is_classifier = True
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -104,8 +104,7 @@ class ResNetCifar(nn.Module):
             )
 
         layers = []
-        layers.append(
-            block(layer_gates[0], self.inplanes, planes, stride, downsample))
+        layers.append(block(layer_gates[0], self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(layer_gates[i], self.inplanes, planes))
@@ -161,9 +160,7 @@ def get_resnet20_trained(dataset: str, checkpoint_dir: str) -> nn.Module:
     if dataset in ["cifar10"]:
         model = resnet20()
         checkpoint_path = os.path.join(checkpoint_dir, "resnet20.pth")
-        model.load_state_dict(torch.load(
-            checkpoint_path, map_location="cpu")["model"])
+        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu")["model"])
         tqdm.write(f"Loaded Resnet20 weights from {checkpoint_path}")
         return model
-    raise NotImplementedError(
-        f"Resnet20 (trained) is not available for {dataset}")
+    raise NotImplementedError(f"Resnet20 (trained) is not available for {dataset}")

@@ -72,6 +72,7 @@ class MobileNet(nn.Module):
             nn.AvgPool2d(7),
         )
         self.fc = nn.Linear(self.channels[5], 1000)
+        self.fc.is_classifier = True
 
     def forward(self, x):
         x = self.model(x)

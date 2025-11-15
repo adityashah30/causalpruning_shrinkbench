@@ -21,6 +21,7 @@ class MlpNet(nn.Module):
         self.fc1 = nn.Linear(input_size, nh1, bias=bias)
         self.fc2 = nn.Linear(nh1, nh2, bias=bias)
         self.fc3 = nn.Linear(nh2, num_classes, bias=bias)
+        self.fc3.is_classifier = True
         self.enable_dropout = enable_dropout
 
     def forward(self, x):
