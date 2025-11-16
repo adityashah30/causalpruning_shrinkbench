@@ -19,6 +19,8 @@ def get_cifar_10(
         "resnet18",
         "resnet20",
         "resnet20_trained",
+        "resnet56",
+        "resnet56_trained",
     ]:
         train_transforms = v2.Compose(
             [

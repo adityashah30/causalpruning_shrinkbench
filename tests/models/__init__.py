@@ -19,6 +19,8 @@ from .resnet import (
 from .resnet_cifar import (
     get_resnet20,
     get_resnet20_trained,
+    get_resnet56,
+    get_resnet56_trained,
 )
 
 import torch.nn as nn
@@ -44,6 +46,10 @@ def get_model(model_name: str, dataset_name: str, checkpoint_dir: str) -> nn.Mod
         return get_resnet20(dataset_name)
     elif model_name == "resnet20_trained":
         return get_resnet20_trained(dataset_name, checkpoint_dir)
+    elif model_name == "resnet56":
+        return get_resnet56(dataset_name)
+    elif model_name == "resnet56_trained":
+        return get_resnet56_trained(dataset_name)
     elif model_name == "resnet50_torch":
         return get_resnet50_torch(dataset_name)
     elif model_name == "resnet50_untrained":

@@ -282,6 +282,8 @@ def parse_args() -> argparse.Namespace:
             "resnet18",
             "resnet20",
             "resnet20_trained",
+            "resnet56",
+            "resnet56_trained",
             "resnet50_torch",
             "resnet50_trained",
             "resnet50_untrained",

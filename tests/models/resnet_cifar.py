@@ -1,166 +1,188 @@
-import os
+"""
+Sourced from
+https://raw.githubusercontent.com/akamaster/pytorch_resnet_cifar10
+==============================================================================
+Properly implemented ResNet-s for CIFAR10 as described in paper [1].
+
+The implementation and structure of this file is hugely influenced by [2]
+which is implemented for ImageNet and doesn't have option A for identity.
+Moreover, most of the implementations on the web is copy-paste from
+torchvision's resnet and has wrong number of params.
+
+Proper ResNet-s for CIFAR10 (for fair comparision and etc.) has following
+number of layers and parameters:
+
+name      | layers | params
+ResNet20  |    20  | 0.27M
+ResNet32  |    32  | 0.46M
+ResNet44  |    44  | 0.66M
+ResNet56  |    56  | 0.85M
+ResNet110 |   110  |  1.7M
+ResNet1202|  1202  | 19.4m
+
+which this implementation indeed has.
+
+Reference:
+[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    Deep Residual Learning for Image Recognition. arXiv:1512.03385
+[2] https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
+
+If you use this implementation in you work, please don't forget to mention the
+author, Yerlan Idelbayev.
+"""
+
 import torch
 import torch.nn as nn
-from tqdm.auto import tqdm
-import math
+import torch.nn.functional as F
+import torch.nn.init as init
 
 
-NUM_CLASSES = 10
+def pretrained_weights(model):
+    url = f"https://raw.githubusercontent.com/JJGO/shrinkbench-models/master/cifar10/{model}.th"
+    print(url)
+    return torch.hub.load_state_dict_from_url(url, map_location="cpu")
 
 
-def conv3x3(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(
-        in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False
-    )
+def _weights_init(m):
+    classname = m.__class__.__name__
+    # print(classname)
+    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+        init.kaiming_normal_(m.weight)
+
+
+class LambdaLayer(nn.Module):
+    def __init__(self, lambd):
+        super(LambdaLayer, self).__init__()
+        self.lambd = lambd
+
+    def forward(self, x):
+        return self.lambd(x)
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, block_gates, inplanes, planes, stride=1, downsample=None):
+    def __init__(self, in_planes, planes, stride=1, option="A"):
         super(BasicBlock, self).__init__()
-        self.block_gates = block_gates
-        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.conv1 = nn.Conv2d(
+            in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn1 = nn.BatchNorm2d(planes)
-        # To enable layer removal inplace must be False
-        self.relu1 = nn.ReLU(inplace=False)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(planes)
-        self.relu2 = nn.ReLU(inplace=False)
-        self.downsample = downsample
-        self.stride = stride
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_planes != planes:
+            if option == "A":
+                """
+                For CIFAR10 ResNet paper uses option A.
+                """
+                self.shortcut = LambdaLayer(
+                    lambda x: F.pad(
+                        x[:, :, ::2, ::2],
+                        (0, 0, 0, 0, planes // 4, planes // 4),
+                        "constant",
+                        0,
+                    )
+                )
+            elif option == "B":
+                self.shortcut = nn.Sequential(
+                    nn.Conv2d(
+                        in_planes,
+                        self.expansion * planes,
+                        kernel_size=1,
+                        stride=stride,
+                        bias=False,
+                    ),
+                    nn.BatchNorm2d(self.expansion * planes),
+                )
 
     def forward(self, x):
-        residual = out = x
-
-        if self.block_gates[0]:
-            out = self.conv1(x)
-            out = self.bn1(out)
-            out = self.relu1(out)
-
-        if self.block_gates[1]:
-            out = self.conv2(out)
-            out = self.bn2(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.relu2(out)
-
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += self.shortcut(x)
+        out = F.relu(out)
         return out
 
 
-class ResNetCifar(nn.Module):
-    def __init__(self, block, layers, num_classes=NUM_CLASSES):
-        self.nlayers = 0
-        # Each layer manages its own gates
-        self.layer_gates = []
-        for layer in range(3):
-            # For each of the 3 layers, create block gates: each block has two layers
-            self.layer_gates.append([])  # [True, True] * layers[layer])
-            for blk in range(layers[layer]):
-                self.layer_gates[layer].append([True, True])
+class ResNet(nn.Module):
+    def __init__(self, block, num_blocks, num_classes=10):
+        super(ResNet, self).__init__()
+        self.in_planes = 16
 
-        self.inplanes = 16  # 64
-        super(ResNetCifar, self).__init__()
-        self.conv1 = nn.Conv2d(
-            3, self.inplanes, kernel_size=3, stride=1, padding=1, bias=False
-        )
-        self.bn1 = nn.BatchNorm2d(self.inplanes)
-        self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(self.layer_gates[0], block, 16, layers[0])
-        self.layer2 = self._make_layer(
-            self.layer_gates[1], block, 32, layers[1], stride=2
-        )
-        self.layer3 = self._make_layer(
-            self.layer_gates[2], block, 64, layers[2], stride=2
-        )
-        self.avgpool = nn.AvgPool2d(8, stride=1)
-        self.fc = nn.Linear(64 * block.expansion, num_classes)
-        self.fc.is_classifier = True
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.layer1 = self._make_layer(block, 16, num_blocks[0], stride=1)
+        self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
+        self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
+        self.linear = nn.Linear(64, num_classes)
+        self.linear.is_classifier = True  # So layer is not pruned
+        self.apply(_weights_init)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2.0 / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-    def _make_layer(self, layer_gates, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(
-                    self.inplanes,
-                    planes * block.expansion,
-                    kernel_size=1,
-                    stride=stride,
-                    bias=False,
-                ),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
         layers = []
-        layers.append(block(layer_gates[0], self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            layers.append(block(layer_gates[i], self.inplanes, planes))
+        for stride in strides:
+            layers.append(block(self.in_planes, planes, stride))
+            self.in_planes = planes * block.expansion
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-
-        return x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = F.avg_pool2d(out, out.size()[3])
+        out = out.view(out.size(0), -1)
+        out = self.linear(out)
+        return out
 
 
-def resnet20(**kwargs):
-    model = ResNetCifar(BasicBlock, [3, 3, 3], **kwargs)
-    return model
+def resnet_factory(filters, num_classes, name):
+    def _resnet(pretrained=True):
+        model = ResNet(BasicBlock, filters, num_classes=num_classes)
+        if pretrained:
+            weights = pretrained_weights(name)["state_dict"]
+            # TODO have a better solution for DataParallel models
+            # For models trained with nn.DataParallel
+            if list(weights.keys())[0].startswith("module."):
+                weights = {k[len("module.") :]: v for k, v in weights.items()}
+            model.load_state_dict(weights)
+        return model
 
-
-def resnet32(**kwargs):
-    model = ResNetCifar(BasicBlock, [5, 5, 5], **kwargs)
-    return model
-
-
-def resnet44(**kwargs):
-    model = ResNetCifar(BasicBlock, [7, 7, 7], **kwargs)
-    return model
-
-
-def resnet56(**kwargs):
-    model = ResNetCifar(BasicBlock, [9, 9, 9], **kwargs)
-    return model
+    return _resnet
 
 
 def get_resnet20(dataset: str) -> nn.Module:
     dataset = dataset.lower()
     if dataset == "cifar10":
-        model = resnet20(num_classes=10)
-        return model
+        factory = resnet_factory([3, 3, 3], 10, "resnet20")
+        return factory(pretrained=False)
     raise NotImplementedError(f"resnet20 is not available for {dataset}")
+
+
+def get_resnet56(dataset: str) -> nn.Module:
+    dataset = dataset.lower()
+    if dataset == "cifar10":
+        factory = resnet_factory([9, 9, 9], 10, "resnet56")
+        return factory(pretrained=False)
+    raise NotImplementedError(f"resnet56 is not available for {dataset}")
 
 
 def get_resnet20_trained(dataset: str, checkpoint_dir: str) -> nn.Module:
     dataset = dataset.lower()
-    if dataset in ["cifar10"]:
-        model = resnet20()
-        checkpoint_path = os.path.join(checkpoint_dir, "resnet20.pth")
-        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu")["model"])
-        tqdm.write(f"Loaded Resnet20 weights from {checkpoint_path}")
-        return model
-    raise NotImplementedError(f"Resnet20 (trained) is not available for {dataset}")
+    if dataset == "cifar10":
+        factory = resnet_factory([3, 3, 3], 10, "resnet20")
+        return factory(pretrained=True)
+    raise NotImplementedError(f"resnet20_trained is not available for {dataset}")
+
+
+def get_resnet56_trained(dataset: str) -> nn.Module:
+    dataset = dataset.lower()
+    if dataset == "cifar10":
+        factory = resnet_factory([9, 9, 9], 10, "resnet56")
+        return factory(pretrained=True)
+    raise NotImplementedError(f"resnet56_trained is not available for {dataset}")
